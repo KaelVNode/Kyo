@@ -2,43 +2,49 @@ import { ethers } from "ethers";
 import dotenv from "dotenv";
 dotenv.config();
 
+// Inisialisasi provider dan wallet
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
-const routerAddress = "0x0dC73Fe1341365929Ed8a89Dd47097A9FDD254D0";
+// Alamat dan ABI Router Uniswap V2
+const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
 const routerABI = [
-    {"inputs":[{"internalType":"address","name":"_factory","type":"address"},{"internalType":"address","name":"_WETH9","type":"address"},{"internalType":"bytes32","name":"initCodeHash","type":"bytes32"}],"stateMutability":"nonpayable","type":"constructor"},
-    {"inputs":[],"name":"WETH9","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-    {"inputs":[{"components":[{"internalType":"bytes","name":"path","type":"bytes"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"},{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMinimum","type":"uint256"}],"internalType":"struct ISwapRouter.ExactInputParams","name":"params","type":"tuple"}],"name":"exactInput","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"}],"stateMutability":"payable","type":"function"},
-    {"inputs":[{"components":[{"internalType":"address","name":"tokenIn","type":"address"},{"internalType":"address","name":"tokenOut","type":"address"},{"internalType":"uint24","name":"fee","type":"uint24"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"},{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMinimum","type":"uint256"},{"internalType":"uint160","name":"sqrtPriceLimitX96","type":"uint160"}],"internalType":"struct ISwapRouter.ExactInputSingleParams","name":"params","type":"tuple"}],"name":"exactInputSingle","outputs":[{"internalType":"uint256","name":"amountOut","type":"uint256"}],"stateMutability":"payable","type":"function"}
+    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)"
 ];
 
+// Inisialisasi kontrak router
 const router = new ethers.Contract(routerAddress, routerABI, wallet);
 
-const tokenIn = "ETH";
-const tokenOut = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369"; // Replace with target token
-const amountIn = ethers.parseEther("0.1"); // Amount of ETH to swap
+// Alamat token tujuan dan WETH di jaringan Soneium
+const WETH = "0x4200000000000000000000000000000000000006"; // Ganti dengan alamat WETH di jaringan Soneium
+const tokenOut = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369"; // Ganti dengan alamat token tujuan
+const amountIn = ethers.parseEther("0.000001"); // Jumlah ETH yang akan ditukar
 const slippage = 0.01; // 1% slippage
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 min
+const deadline = Math.floor(Date.now() / 1000) + 60 * 5; // 5 menit
 
-async function swapTokens() {
-    const amounts = await router.getAmountsOut(amountIn, [tokenIn, tokenOut]);
-    const minAmountOut = amounts[1] * (1 - slippage);
-    
-    const tx = await router.exactInputSingle({
-        tokenIn,
-        tokenOut,
-        fee: 3000,
-        recipient: wallet.address,
-        deadline,
-        amountIn,
-        amountOutMinimum: minAmountOut,
-        sqrtPriceLimitX96: 0
-    }, { value: amountIn });
+async function swapETHForTokens() {
+    try {
+        // Tentukan jalur swap: WETH -> Token
+        const path = [WETH, tokenOut];
 
-    console.log(`Swapping ETH for tokens... TX: ${tx.hash}`);
-    await tx.wait();
-    console.log("Swap complete!");
+        // Tentukan jumlah minimum token yang diterima (gunakan perkiraan manual atau panggil getAmountsOut jika tersedia)
+        const amountOutMin = 0; // Sementara, Anda bisa gunakan data dari frontend DEX
+
+        // Lakukan swap
+        const tx = await router.swapExactETHForTokens(
+            amountOutMin,
+            path,
+            wallet.address,
+            deadline,
+            { value: amountIn }
+        );
+
+        console.log(`Swapping ETH for tokens... TX: ${tx.hash}`);
+        await tx.wait();
+        console.log("Swap complete!");
+    } catch (error) {
+        console.error("Error swapping tokens:", error);
+    }
 }
 
-swapTokens().catch(console.error);
+swapETHForTokens();
