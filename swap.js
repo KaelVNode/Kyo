@@ -116,6 +116,13 @@ async function countdown(seconds) {
 
     const ethPerSwap = await askQuestion("💰 Enter amount of ETH per swap: ");
     const swapCount = await askQuestion("🛠 Enter number of swaps: ");
+    let delayTime = await askQuestion("⏳ Enter delay between swaps (seconds, default 5): ");
+
+    if (!delayTime || isNaN(delayTime) || delayTime <= 0) {
+        delayTime = 5; // Default to 5 seconds if input is invalid
+    }
+
+    console.log(chalk.cyan(`🔄 Delay set to ${delayTime} seconds per swap.`));
 
     const ethAmount = ethers.parseEther(ethPerSwap);
     const totalEthNeeded = ethAmount * BigInt(swapCount);
@@ -131,7 +138,7 @@ async function countdown(seconds) {
         await swapETHForTokens(ethAmount);
 
         if (i < swapCount - 1) {
-            await countdown(5);
+            await countdown(delayTime);
         }
     }
 
