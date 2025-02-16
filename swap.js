@@ -28,11 +28,8 @@ const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
 // Function to fetch balance and transaction count from RPC
 async function getAccountDetails() {
     try {
-        // Fetch ETH balance from RPC
         const balanceWei = await provider.getBalance(address);
         const balanceEth = ethers.formatEther(balanceWei);
-
-        // Fetch transaction count from RPC (nonce)
         const txCount = await provider.getTransactionCount(address);
 
         console.log(chalk.cyan(`🔹 Address: ${address}`));
@@ -65,7 +62,7 @@ async function swapETHForTokens(amountIn) {
         console.log(chalk.yellow(`🔄 Preparing swap for ${ethers.formatEther(amountIn)} ETH...`));
 
         const path = [WETH, tokenOut];
-        const amountOutMin = 0; // No slippage handling for now
+        const amountOutMin = 0; 
 
         const tx = await router.swapExactETHForTokens(
             amountOutMin,
@@ -88,20 +85,33 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ASCII Art "Saandy"
+console.log(chalk.green(`
+¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
+¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
+¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
+  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
+¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
+¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
+¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
+¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
+      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
+                                    ¦     ¦ ¦     
+`));
+
 // Main execution
 (async () => {
     const accountDetails = await getAccountDetails();
     
     if (!accountDetails) return;
 
-    // Get user input
     const ethPerSwap = await askQuestion("💰 Enter amount of ETH per swap: ");
     const swapCount = await askQuestion("🔄 Enter number of swaps: ");
+    const delayBetweenSwaps = await askQuestion("⏳ Enter delay between swaps (in seconds): ");
 
     const ethAmount = ethers.parseEther(ethPerSwap);
     const totalEthNeeded = ethAmount * BigInt(swapCount);
 
-    // Check if balance is sufficient
     if (parseFloat(accountDetails.balanceEth) < parseFloat(ethers.formatEther(totalEthNeeded))) {
         console.log(chalk.red("❌ Not enough balance to execute all swaps!"));
         return;
@@ -114,8 +124,8 @@ function delay(ms) {
         await swapETHForTokens(ethAmount);
 
         if (i < swapCount - 1) {
-            console.log(chalk.blue("⏳ Waiting 5 seconds before next swap..."));
-            await delay(5000);
+            console.log(chalk.blue(`⏳ Waiting ${delayBetweenSwaps} seconds before next swap...`));
+            await delay(parseInt(delayBetweenSwaps) * 1000);
         }
     }
 
