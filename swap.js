@@ -1,12 +1,13 @@
 import { ethers } from "ethers";
 import dotenv from "dotenv";
 import readline from "readline";
-import chalk from "chalk";
+import chalk from "chalk"; // Terminal color library
 
 dotenv.config();
 
+// ASCII Art "Saandy"
 console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
+¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
 ¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
 ¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
   ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
@@ -18,805 +19,119 @@ console.log(chalk.green(`
                                     ¦     ¦ ¦     
 `));
 
+// Initialize provider and wallet
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+
+const address = wallet.address;
+
+// Uniswap V2 Router Contract
 const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
 const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
+    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)"
 ];
 
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
+// Initialize contract
 const router = new ethers.Contract(routerAddress, routerABI, wallet);
 
-async function getTokenBalance(tokenAddress) {
+// Token and WETH addresses
+const WETH = "0x4200000000000000000000000000000000000006"; 
+const tokenOut = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369"; 
+const deadline = Math.floor(Date.now() / 1000) + 60 * 5; 
+
+// Function to fetch balance and transaction count from RPC
+async function getAccountDetails() {
     try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
+        // Fetch ETH balance from RPC
+        const balanceWei = await provider.getBalance(address);
+        const balanceEth = ethers.formatEther(balanceWei);
+
+        // Fetch transaction count from RPC (nonce)
+        const txCount = await provider.getTransactionCount(address);
+
+        console.log(chalk.cyan(`🔹 Address: ${address}`));
+        console.log(chalk.yellow(`💰 Balance: ${balanceEth} ETH`));
+        console.log(chalk.green(`📊 Total Transactions: ${txCount}`));
+
+        return { balanceEth, txCount };
     } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
+        console.error(chalk.red("❌ Error fetching account details:"), error);
+        return null;
     }
 }
 
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
-        const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
-        );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
+// Function to get user input
 function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
     return new Promise(resolve => rl.question(chalk.blue(query), ans => {
         rl.close();
         resolve(ans);
     }));
 }
 
-(async () => {
+// Function to swap ETH for tokens
+async function swapETHForTokens(amountIn) {
     try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
+        console.log(chalk.yellow(`🔄 Preparing swap for ${ethers.formatEther(amountIn)} ETH...`));
 
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
+        const path = [WETH, tokenOut];
+        const amountOutMin = 0; // No slippage handling for now
 
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
-        }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
-    }
-})();
-import { ethers } from "ethers";
-import dotenv from "dotenv";
-import readline from "readline";
-import chalk from "chalk";
-
-dotenv.config();
-
-console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
-];
-
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
-const router = new ethers.Contract(routerAddress, routerABI, wallet);
-
-async function getTokenBalance(tokenAddress) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
-    } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
-    }
-}
-
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
         const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
+            amountOutMin,
+            path,
+            wallet.address,
+            deadline,
+            { value: amountIn }
         );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
+
+        console.log(chalk.green(`✅ Swapping ETH for tokens... TX: ${tx.hash}`));
         await tx.wait();
+        console.log(chalk.green("✔ Swap complete!"));
     } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
+        console.error(chalk.red("❌ Error swapping tokens:"), error);
     }
 }
 
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
+// Delay function
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => rl.question(chalk.blue(query), ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-
+// Main execution
 (async () => {
-    try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
+    const accountDetails = await getAccountDetails();
+    
+    if (!accountDetails) return;
 
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
+    // Get user input
+    const ethPerSwap = await askQuestion("💰 Enter amount of ETH per swap: ");
+    const swapCount = await askQuestion("🔄 Enter number of swaps: ");
 
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
+    const ethAmount = ethers.parseUnits(ethPerSwap, "ether");
+    const totalEthNeeded = ethAmount * BigInt(swapCount);
+
+    // Check if balance is sufficient
+    if (parseFloat(accountDetails.balanceEth) < parseFloat(ethers.formatEther(totalEthNeeded))) {
+        console.log(chalk.red("❌ Not enough balance to execute all swaps!"));
+        return;
+    }
+
+    console.log(chalk.magenta(`🚀 Starting ${swapCount} swaps of ${ethPerSwap} ETH each...`));
+
+    for (let i = 0; i < swapCount; i++) {
+        console.log(chalk.cyan(`🔹 Swap ${i + 1} of ${swapCount}...`));
+        await swapETHForTokens(ethAmount);
+
+        if (i < swapCount - 1) {
+            console.log(chalk.blue("⏳ Waiting 5 seconds before next swap..."));
+            await delay(5000);
         }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
     }
-})();
-import { ethers } from "ethers";
-import dotenv from "dotenv";
-import readline from "readline";
-import chalk from "chalk";
 
-dotenv.config();
-
-console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
-];
-
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
-const router = new ethers.Contract(routerAddress, routerABI, wallet);
-
-async function getTokenBalance(tokenAddress) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
-    } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
-    }
-}
-
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
-        const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
-        );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => rl.question(chalk.blue(query), ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-
-(async () => {
-    try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
-
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
-
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
-        }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
-    }
-})();
-import { ethers } from "ethers";
-import dotenv from "dotenv";
-import readline from "readline";
-import chalk from "chalk";
-
-dotenv.config();
-
-console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
-];
-
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
-const router = new ethers.Contract(routerAddress, routerABI, wallet);
-
-async function getTokenBalance(tokenAddress) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
-    } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
-    }
-}
-
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
-        const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
-        );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => rl.question(chalk.blue(query), ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-
-(async () => {
-    try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
-
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
-
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
-        }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
-    }
-})();
-import { ethers } from "ethers";
-import dotenv from "dotenv";
-import readline from "readline";
-import chalk from "chalk";
-
-dotenv.config();
-
-console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
-];
-
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
-const router = new ethers.Contract(routerAddress, routerABI, wallet);
-
-async function getTokenBalance(tokenAddress) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
-    } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
-    }
-}
-
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
-        const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
-        );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => rl.question(chalk.blue(query), ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-
-(async () => {
-    try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
-
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
-
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
-        }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
-    }
-})();
-import { ethers } from "ethers";
-import dotenv from "dotenv";
-import readline from "readline";
-import chalk from "chalk";
-
-dotenv.config();
-
-console.log(chalk.green(`
-  ¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const routerAddress = "0x3c56C7C1Bfd9dbC14Ab04935f409d49D3b7A802E";
-const WETH = "0x4200000000000000000000000000000000000006";
-const USDC = "0xba9986d2381edf1da03b0b9c1f8b00dc4aacc369";
-const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
-const routerABI = [
-    "function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline) external payable returns (uint[] memory amounts)",
-    "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)",
-    "function approve(address spender, uint256 amount) external returns (bool)"
-];
-
-const erc20ABI = [
-    "function balanceOf(address owner) view returns (uint)",
-    "function approve(address spender, uint amount) external returns (bool)"
-];
-
-const router = new ethers.Contract(routerAddress, routerABI, wallet);
-
-async function getTokenBalance(tokenAddress) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-        const balance = await tokenContract.balanceOf(wallet.address);
-        console.log(chalk.green(`? Balance: ${ethers.formatEther(balance)} tokens`));
-        return balance;
-    } catch (error) {
-        console.error(chalk.red("? Error fetching balance:"), error);
-        return BigInt(0);
-    }
-}
-
-async function approveToken(tokenAddress, amount) {
-    try {
-        const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, wallet);
-        const tx = await tokenContract.approve(routerAddress, amount);
-        console.log(chalk.blue(`?? Approving ${ethers.formatEther(amount)} tokens... TX: ${tx.hash}`));
-        await tx.wait();
-        console.log(chalk.green("? Approval successful!"));
-    } catch (error) {
-        console.error(chalk.red("? Error approving token:"), error);
-    }
-}
-
-async function swapETHForUSDC(amountIn) {
-    try {
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(amountIn)} ETH to USDC...`));
-        const path = [WETH, USDC];
-        const tx = await router.swapExactETHForTokens(
-            0, path, wallet.address, deadline, { value: amountIn }
-        );
-        console.log(chalk.green(`? Swap successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function swapUSDCForWETH() {
-    try {
-        const usdcBalance = await getTokenBalance(USDC);
-        if (usdcBalance === BigInt(0)) return console.log(chalk.red("? No USDC available!"));
-        console.log(chalk.yellow(`?? Swapping ${ethers.formatEther(usdcBalance)} USDC to WETH...`));
-        await approveToken(USDC, usdcBalance);
-        const path = [USDC, WETH];
-        const tx = await router.swapExactTokensForTokens(
-            usdcBalance, 0, path, wallet.address, deadline
-        );
-        console.log(chalk.green(`? Swap back to WETH successful! TX: ${tx.hash}`));
-        await tx.wait();
-    } catch (error) {
-        console.error(chalk.red("? Swap error:"), error);
-    }
-}
-
-async function delay(ms) {
-    console.log(chalk.blue(`? Waiting ${ms / 1000} seconds...`));
-    await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function askQuestion(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => rl.question(chalk.blue(query), ans => {
-        rl.close();
-        resolve(ans);
-    }));
-}
-
-(async () => {
-    try {
-        const ethPerSwap = await askQuestion("?? Enter ETH per swap: ");
-        const swapCount = await askQuestion("?? Number of swaps: ");
-        const delayTime = await askQuestion("? Delay time between swaps (seconds): ");
-
-        const ethAmount = ethers.parseEther(ethPerSwap);
-        const totalSwaps = parseInt(swapCount);
-        const delayMs = parseInt(delayTime) * 1000;
-
-        if (isNaN(totalSwaps) || isNaN(delayMs) || ethAmount <= 0) {
-            console.log(chalk.red("? Invalid input! Exiting..."));
-            return;
-        }
-
-        console.log(chalk.magenta(`?? Starting ${totalSwaps} swaps of ${ethPerSwap} ETH...`));
-
-        for (let i = 0; i < totalSwaps; i++) {
-            console.log(chalk.cyan(`?? Swap ${i + 1}/${totalSwaps}...`));
-            await swapETHForUSDC(ethAmount);
-            if (i < totalSwaps - 1) await delay(delayMs);
-        }
-        console.log(chalk.magenta("?? Finalizing swaps..."));
-        await swapUSDCForWETH();
-        console.log(chalk.green("?? All swaps completed!"));
-    } catch (error) {
-        console.error(chalk.red("? Fatal error:"), error);
-    }
+    console.log(chalk.green("🎉 All swaps completed!"));
 })();
