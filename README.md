@@ -3,7 +3,7 @@ npm install
 
 ```
 ```
-npm install ethers dotenv chalk readline
+npm install ethers dotenv chalk readline axios
 ```
 ```
 npm start
