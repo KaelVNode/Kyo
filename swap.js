@@ -5,20 +5,6 @@ import chalk from "chalk"; // Terminal color library
 
 dotenv.config();
 
-// ASCII Art "Saandy"
-console.log(chalk.green(`
-¦¦¦¦¦¦ ___     ___      ¦¦¦_    ¦¦¦¦¦¦¦¦¦¦   ¦¦¦
-¦¦¦    ¦¦¦¦¦¦_  ¦¦¦¦¦_    ¦¦ ¯¦   ¦¦¦¦¯ ¦¦¦¦¦  ¦¦¦
-¦ ¦¦¦_  ¦¦¦  ¯¦_¦¦¦  ¯¦_ ¦¦¦  ¯¦ ¦¦¦¦¦   ¦¦¦¦¦ ¦¦¦
-  ¦   ¦¦¦¦¦____¦¦¦¦____¦¦¦¦¦¦  ¦¦¦¦¦¦¦_   ¦¦ ¦¦¦¦¦
-¦¦¦¦¦¦¦¦¦¦¦   ¦¦¦¦¦   ¦¦¦¦¦¦¦   ¦¦¦¦¦¦¦¦¦¦ ¦ ¦¦¦¦¦
-¦ ¦¦¦ ¦ ¦¦¦   ¦¦¦¦¦   ¦¦¦¦ ¦¦   ¦ ¦ ¦¦¦  ¦  ¦¦¦¦¦ 
-¦ ¦¦  ¦ ¦ ¦   ¦¦ ¦¦   ¦¦ ¦ ¦¦   ¦ ¦¦¦ ¦  ¦¦¦¦ ¦¦¦ 
-¦  ¦  ¦   ¦   ¦   ¦   ¦     ¦   ¦ ¦ ¦ ¦  ¦¦ ¦ ¦¦  
-      ¦       ¦  ¦    ¦  ¦        ¦   ¦   ¦ ¦     
-                                    ¦     ¦ ¦     
-`));
-
 // Initialize provider and wallet
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
@@ -112,7 +98,7 @@ function delay(ms) {
     const ethPerSwap = await askQuestion("💰 Enter amount of ETH per swap: ");
     const swapCount = await askQuestion("🔄 Enter number of swaps: ");
 
-    const ethAmount = ethers.parseUnits(ethPerSwap, "ether");
+    const ethAmount = ethers.parseEther(ethPerSwap);
     const totalEthNeeded = ethAmount * BigInt(swapCount);
 
     // Check if balance is sufficient
