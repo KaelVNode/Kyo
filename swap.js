@@ -35,13 +35,13 @@ async function getAccountDetails() {
         // Fetch transaction count from RPC (nonce)
         const txCount = await provider.getTransactionCount(address);
 
-        console.log(chalk.cyan(`🔹 Address: ${address}`));
-        console.log(chalk.yellow(`💰 Balance: ${balanceEth} ETH`));
-        console.log(chalk.green(`📊 Total Transactions: ${txCount}`));
+        console.log(chalk.cyan(`?? Address: ${address}`));
+        console.log(chalk.yellow(`?? Balance: ${balanceEth} ETH`));
+        console.log(chalk.green(`?? Total Transactions: ${txCount}`));
 
         return { balanceEth, txCount };
     } catch (error) {
-        console.error(chalk.red("❌ Error fetching account details:"), error);
+        console.error(chalk.red("? Error fetching account details:"), error);
         return null;
     }
 }
@@ -62,7 +62,7 @@ function askQuestion(query) {
 // Function to swap ETH for tokens
 async function swapETHForTokens(amountIn) {
     try {
-        console.log(chalk.yellow(`🔄 Preparing swap for ${ethers.formatEther(amountIn)} ETH...`));
+        console.log(chalk.yellow(`?? Preparing swap for ${ethers.formatEther(amountIn)} ETH...`));
 
         const path = [WETH, tokenOut];
         const amountOutMin = 0; // No slippage handling for now
@@ -75,11 +75,19 @@ async function swapETHForTokens(amountIn) {
             { value: amountIn }
         );
 
-        console.log(chalk.green(`✅ Swapping ETH for tokens... TX: ${tx.hash}`));
+        console.log(chalk.green(`? Swapping ETH for tokens... TX: ${tx.hash}`));
         await tx.wait();
-        console.log(chalk.green("✔ Swap complete!"));
+        console.log(chalk.green("? Swap complete!"));
+
+        // Fetch and display updated account details after each swap
+        const accountDetails = await getAccountDetails();
+        if (accountDetails) {
+            console.log(chalk.cyan(`?? Updated Address: ${address}`));
+            console.log(chalk.yellow(`?? Updated Balance: ${accountDetails.balanceEth} ETH`));
+            console.log(chalk.green(`?? Total Transactions: ${accountDetails.txCount}`));
+        }
     } catch (error) {
-        console.error(chalk.red("❌ Error swapping tokens:"), error);
+        console.error(chalk.red("? Error swapping tokens:"), error);
     }
 }
 
@@ -95,29 +103,29 @@ function delay(ms) {
     if (!accountDetails) return;
 
     // Get user input
-    const ethPerSwap = await askQuestion("💰 Enter amount of ETH per swap: ");
-    const swapCount = await askQuestion("🔄 Enter number of swaps: ");
+    const ethPerSwap = await askQuestion("?? Enter amount of ETH per swap: ");
+    const swapCount = await askQuestion("?? Enter number of swaps: ");
 
     const ethAmount = ethers.parseEther(ethPerSwap);
     const totalEthNeeded = ethAmount * BigInt(swapCount);
 
     // Check if balance is sufficient
     if (parseFloat(accountDetails.balanceEth) < parseFloat(ethers.formatEther(totalEthNeeded))) {
-        console.log(chalk.red("❌ Not enough balance to execute all swaps!"));
+        console.log(chalk.red("? Not enough balance to execute all swaps!"));
         return;
     }
 
-    console.log(chalk.magenta(`🚀 Starting ${swapCount} swaps of ${ethPerSwap} ETH each...`));
+    console.log(chalk.magenta(`?? Starting ${swapCount} swaps of ${ethPerSwap} ETH each...`));
 
     for (let i = 0; i < swapCount; i++) {
-        console.log(chalk.cyan(`🔹 Swap ${i + 1} of ${swapCount}...`));
+        console.log(chalk.cyan(`?? Swap ${i + 1} of ${swapCount}...`));
         await swapETHForTokens(ethAmount);
 
         if (i < swapCount - 1) {
-            console.log(chalk.blue("⏳ Waiting 5 seconds before next swap..."));
+            console.log(chalk.blue("? Waiting 5 seconds before next swap..."));
             await delay(5000);
         }
     }
 
-    console.log(chalk.green("🎉 All swaps completed!"));
+    console.log(chalk.green("?? All swaps completed!"));
 })();
